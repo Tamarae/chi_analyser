@@ -20,7 +20,12 @@ function App() {
     'შ': 'sh', 'ჩ': 'ch', 'ც': 'c', 'ძ': 'dz', 'წ': 'c', 'ჭ': 'ch', 'ხ': 'x', 'ჯ': 'j', 'ჰ': 'h'
   };
 
-  // Create variations for irregular transcription
+  // Helper function to count morphemes
+  const countMorphemes = (morphemes) => {
+    if (!morphemes || typeof morphemes !== 'string') return 0;
+    // Count morphemes by splitting on hyphens and filtering out empty parts
+    return morphemes.split('-').filter(part => part.trim().length > 0).length;
+  };
   const createTranscriptionVariants = (georgianWord) => {
     if (!georgianWord || typeof georgianWord !== 'string') return [];
 
@@ -110,6 +115,15 @@ function App() {
           if (result.data.length > 0) {
             const firstRow = result.data[0];
             const headers = Object.keys(firstRow);
+            console.log('Headers detected:', headers);
+
+            // Check for new format with morphemes (Word, Frequency, Lemma, POS, Gloss, Morphemes)
+            const hasNewFormat = headers.some(h => h.toLowerCase() === 'word') &&
+                                headers.some(h => h.toLowerCase() === 'frequency') &&
+                                headers.some(h => h.toLowerCase() === 'lemma') &&
+                                headers.some(h => h.toLowerCase() === 'pos') &&
+                                headers.some(h => h.toLowerCase() === 'gloss') &&
+                                headers.some(h => h.toLowerCase() === 'morphemes');
 
             // Check for TSV format (Word forms, Lemma, POS, Gloss)
             const hasTSVFormat = headers.some(h => h.toLowerCase().includes('word forms')) &&
@@ -121,8 +135,8 @@ function App() {
             const hasCSVFormat = headers.some(h => h.toLowerCase().includes('words (frequency)')) &&
                                 headers.some(h => h.toLowerCase() === 'lemma');
 
-            if (!hasTSVFormat && !hasCSVFormat) {
-              setError(`${fileType} must have either:\n- TSV format: "Word forms", "Lemma", "POS", "Gloss" columns\n- CSV format: "Words (Frequency)", "Lemma" columns`);
+            if (!hasNewFormat && !hasTSVFormat && !hasCSVFormat) {
+              setError(`${fileType} must have one of these formats:\n- New format: "Word", "Frequency", "Lemma", "POS", "Gloss", "Morphemes" columns\n- TSV format: "Word forms", "Lemma", "POS", "Gloss" columns\n- CSV format: "Words (Frequency)", "Lemma" columns`);
               setLoading(false);
               return;
             }
@@ -133,7 +147,16 @@ function App() {
             result.data.forEach((row, rowIdx) => {
               let wordsToIndex = [];
 
-              if (hasTSVFormat) {
+              if (hasNewFormat) {
+                // Handle new format with Word column
+                const wordKey = headers.find(h => h.toLowerCase() === 'word');
+                if (wordKey && row[wordKey]) {
+                  const word = row[wordKey].toString().toLowerCase().trim();
+                  if (word) {
+                    wordsToIndex.push(word);
+                  }
+                }
+              } else if (hasTSVFormat) {
                 // Handle TSV format - find the "Word forms" column (case insensitive)
                 const wordFormsKey = headers.find(h => h.toLowerCase().includes('word forms'));
                 if (wordFormsKey && row[wordFormsKey]) {
@@ -355,13 +378,13 @@ function App() {
   const copyResultsToClipboard = () => {
     if (matchedResults.length === 0) return;
 
-    const headers = "Word\tFrequency\tLemma\tPOS\tGloss\tTranscription_Variant\n";
+    const headers = "Word\tFrequency\tLemma\tPOS\tGloss\tMorphemes\tMorpheme_Count\n";
     const rows = matchedResults.flatMap(result => {
       if (result.matches.length === 0) {
-        return showUnmatched ? [`${result.word}\t${result.frequency}\t\t\t\t`] : [];
+        return showUnmatched ? [`${result.word}\t${result.frequency}\t\t\t\t\t`] : [];
       }
       return result.matches.map(match =>
-        `${result.word}\t${result.frequency}\t${match.Lemma || ''}\t${match.POS || ''}\t${match.Gloss || ''}\t${match.transcriptionVariant || 'exact'}`
+        `${result.word}\t${result.frequency}\t${match.Lemma || ''}\t${match.POS || ''}\t${match.Gloss || ''}\t${match.Morphemes || ''}\t${countMorphemes(match.Morphemes)}`
       );
     }).join('\n');
 
@@ -427,13 +450,14 @@ function App() {
                 className="w-full p-2 border rounded h-32 font-mono text-sm"
                 value={referenceCSV}
                 onChange={(e) => setReferenceCSV(e.target.value)}
-                placeholder="CSV format: Words (Frequency),Lemma,Total,POS,Gloss&#10;OR&#10;TSV format: Word forms[TAB]Lemma[TAB]POS[TAB]Gloss"
+                placeholder="New format: Word[TAB]Frequency[TAB]Lemma[TAB]POS[TAB]Gloss[TAB]Morphemes&#10;OR&#10;CSV format: Words (Frequency),Lemma,Total,POS,Gloss&#10;OR&#10;TSV format: Word forms[TAB]Lemma[TAB]POS[TAB]Gloss"
                 disabled={referenceLoaded}
               />
             </div>
             <div className="mb-3 text-sm text-gray-600">
               <p><strong>Supported formats:</strong></p>
               <ul className="list-disc pl-5 mt-1">
+                <li><strong>New TSV:</strong> Headers "Word", "Frequency", "Lemma", "POS", "Gloss", "Morphemes"</li>
                 <li><strong>CSV:</strong> Headers "Words (Frequency)", "Lemma", "POS", "Gloss"</li>
                 <li><strong>TSV:</strong> Headers "Word forms", "Lemma", "POS", "Gloss"</li>
               </ul>
@@ -592,7 +616,8 @@ function App() {
                       <th className="border border-gray-300 px-4 py-2 text-left">Lemma</th>
                       <th className="border border-gray-300 px-4 py-2 text-left">POS</th>
                       <th className="border border-gray-300 px-4 py-2 text-left">Gloss</th>
-                      <th className="border border-gray-300 px-4 py-2 text-left">Match Type</th>
+                      <th className="border border-gray-300 px-4 py-2 text-left">Morphemes</th>
+                      <th className="border border-gray-300 px-4 py-2 text-left">Morpheme Count</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -604,9 +629,6 @@ function App() {
                             <td className="border border-gray-300 px-4 py-2">{result.word}</td>
                             <td className="border border-gray-300 px-4 py-2">{result.frequency}</td>
                             <td className="border border-gray-300 px-4 py-2 text-red-500">Not found</td>
-                            <td className="border border-gray-300 px-4 py-2">-</td>
-                            <td className="border border-gray-300 px-4 py-2">-</td>
-                            <td className="border border-gray-300 px-4 py-2">-</td>
                           </tr>
                         );
                       }
@@ -618,11 +640,13 @@ function App() {
                           <td className="border border-gray-300 px-4 py-2">{match.Lemma}</td>
                           <td className="border border-gray-300 px-4 py-2">{match.POS}</td>
                           <td className="border border-gray-300 px-4 py-2">{match.Gloss}</td>
-                          <td className="border border-gray-300 px-4 py-2">
-                            <span className={match.transcriptionVariant ? "text-blue-600" : "text-green-600"}>
-                              {match.transcriptionVariant ? `Transcribed: ${match.transcriptionVariant}` : 'Exact'}
-                            </span>
+                          <td className="border border-gray-300 px-4 py-2 font-mono text-sm">{match.Morphemes}</td>
+                          <td className="border border-gray-300 px-4 py-2 text-center font-medium">
+                            {countMorphemes(match.Morphemes)}
                           </td>
+                            <td className="border border-gray-300 px-4 py-2">-</td>
+                            <td className="border border-gray-300 px-4 py-2">-</td>
+                            <td className="border border-gray-300 px-4 py-2">-</td>
                         </tr>
                       ));
                     })}
@@ -655,7 +679,7 @@ function App() {
             </ol>
             <p className="mt-2 text-sm text-gray-600">
               This tool supports both exact matching and Georgian-to-Latin transcription matching with multiple variant patterns.
-              It now handles both CSV and TSV reference data formats automatically.
+              It now handles CSV, TSV, and the new morpheme-enhanced TSV format with columns: Word, Frequency, Lemma, POS, Gloss, Morphemes.
             </p>
           </div>
         </div>
