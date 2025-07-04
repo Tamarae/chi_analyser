@@ -622,31 +622,41 @@ function App() {
                   </thead>
                   <tbody>
                     {matchedResults.map((result) => {
+                      // Logic for unmatched words
                       if (result.matches.length === 0) {
                         if (!showUnmatched) return null;
                         return (
                           <tr key={`unmatched-${result.originalIndex}`} className="bg-red-50">
                             <td className="border border-gray-300 px-4 py-2">{result.word}</td>
                             <td className="border border-gray-300 px-4 py-2">{result.frequency}</td>
-                            <td className="border border-gray-300 px-4 py-2 text-red-500">Not found</td>
+                            {/* Use colSpan to correctly align the 'Not found' message */}
+                            <td className="border border-gray-300 px-4 py-2 text-red-500" colSpan="5">
+                              Not found
+                            </td>
                           </tr>
                         );
                       }
 
+                      // Logic for matched words
                       return result.matches.map((match, matchIdx) => (
                         <tr key={`match-${result.originalIndex}-${matchIdx}`} className={matchIdx > 0 ? "bg-blue-50" : ""}>
                           <td className="border border-gray-300 px-4 py-2">{matchIdx === 0 ? result.word : ""}</td>
                           <td className="border border-gray-300 px-4 py-2">{matchIdx === 0 ? result.frequency : ""}</td>
                           <td className="border border-gray-300 px-4 py-2">{match.Lemma}</td>
-                          <td className="border border-gray-300 px-4 py-2">{match.POS}</td>
+
+                          {/* THIS IS THE KEY CHANGE FOR YOUR REQUEST */}
+                          <td className={`border border-gray-300 px-4 py-2 ${
+                              (match.POS === 'PE' || match.POS === 'ME') ? 'text-blue-600 font-bold' : ''
+                          }`}>
+                              {match.POS}
+                          </td>
+
                           <td className="border border-gray-300 px-4 py-2">{match.Gloss}</td>
                           <td className="border border-gray-300 px-4 py-2 font-mono text-sm">{match.Morphemes}</td>
                           <td className="border border-gray-300 px-4 py-2 text-center font-medium">
                             {countMorphemes(match.Morphemes)}
                           </td>
-                            <td className="border border-gray-300 px-4 py-2">-</td>
-                            <td className="border border-gray-300 px-4 py-2">-</td>
-                            <td className="border border-gray-300 px-4 py-2">-</td>
+                          {/* The extra empty <td> elements were removed to match the header count */}
                         </tr>
                       ));
                     })}
